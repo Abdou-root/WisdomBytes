@@ -187,3 +187,4 @@ All contributions are welcome, below is how you can setup the project.
 ---
 
 This documentation should give you a solid foundation to expand upon as needed. It covers the main components, server-side logic, and usage instructions.
+All your contributions are welcome !!
