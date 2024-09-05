@@ -107,7 +107,7 @@ All contributions are welcome, below is how you can setup the project.
 1. Clone the repository.
 
    ```bash
-   git clone https://github.com/your-repo/blog-platform.git
+   git clone https://github.com/Abdou-root/WisdomBytes
    ```
 
 2. Install server-side dependencies.
@@ -133,7 +133,14 @@ All contributions are welcome, below is how you can setup the project.
      JWT_SECRET=your_jwt_secret
      AUTH_EMAIL=your_email
      AUTH_PASS=your_email_password
-     REACT_APP_BASE_URL=http://localhost:3000/api
+     REACT_APP_BASE_URL=http://localhost:3000/api (or the port you choose)
+     ```
+5. Set up environment variables. (client side .env)
+   - Create a `.env` file in the `client` directory.
+   - Add the following variables:
+     ```
+     REACT_APP_BASE_URL=http://localhost:5000/api (or the port you choose to run it on)
+     REACT_APP_ASSETS_URL=http://localhost:5000
      ```
 
 ### Running the Application
