@@ -12,6 +12,7 @@ const HttpError = require("../models/errorModel")
 const userOtpVerification = require("../models/otpVerificationModel")
 const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
+const { validateAvatar } = require('../utils/fileValidation');
 
 
 // Nodemailer to send email verification 
@@ -204,14 +205,17 @@ const loginUser = async (req, res, next) => {
         const { _id: id, name } = user;
         const token = jwt.sign({ id, name }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
-        res.cookie('token', token, {
-            httpOnly: true, secure: false, maxAge: 24 * 60 * 60 * 1000 // For cross-site cookies
-            // Cookie expires in 24 hours
-        })
-        res.cookie('userId', id, {
-            httpOnly: true, secure: false, maxAge: 24 * 60 * 60 * 1000 // For cross-site cookies
-            // Cookie expires in 24 hours
-        })
+        // Cookie configuration - secure in production
+        const isProduction = process.env.NODE_ENV === 'production';
+        const cookieOptions = {
+            httpOnly: true,
+            secure: isProduction, // Only send over HTTPS in production
+            sameSite: isProduction ? 'strict' : 'lax', // CSRF protection
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            path: '/'
+        };
+
+        res.cookie('token', token, cookieOptions);
 
         res.status(200).json({ id, name });
 
@@ -226,7 +230,14 @@ const loginUser = async (req, res, next) => {
 const logoutUser = (req, res, next) => {
     try {
         // Clear the cookie by setting it with an expired date
-        res.cookie('token', '', { httpOnly: true, expires: new Date(0), path: '/' });
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.cookie('token', '', { 
+            httpOnly: true, 
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            expires: new Date(0), 
+            path: '/' 
+        });
         res.status(200).json({ message: 'Successfully logged out' });
     } catch (error) {
         next(new HttpError('Logout failed, please try again', 500));
@@ -287,9 +298,10 @@ const changeAvatar = async (req, res, next) => {
             })
         }
         const { avatar } = req.files;
-        // check size
-        if (avatar.size > 500000) {
-            return next(new HttpError("Profile picture too big. Should be less than 500kb", 422))
+        // Validate avatar file
+        const avatarValidation = validateAvatar(avatar);
+        if (!avatarValidation.valid) {
+            return next(new HttpError(avatarValidation.error, 422))
         }
 
         let fileName;

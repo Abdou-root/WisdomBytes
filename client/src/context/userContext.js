@@ -12,10 +12,12 @@ const UserProvider = ({ children }) => {
         const fetchCurrentUser = async () => {
             try {
                 const response = await axios.get(`${process.env.REACT_APP_BASE_URL}/users/current`, { withCredentials: true });
-                // console.log('Fetched user data:', response.data);
                 setCurrentUser(response.data);
             } catch (error) {
-                console.error('Error fetching current user:', error);
+                // User is not authenticated - this is expected for logged-out users
+                if (error.response?.status !== 401 && error.response?.status !== 402) {
+                    console.error('Error fetching current user:', error);
+                }
                 setCurrentUser(null);
             } finally {
                 setLoading(false);

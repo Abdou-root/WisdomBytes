@@ -7,50 +7,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import Loader from "../components/Loader"
 import { UserContext } from "../context/userContext";
 import axios from "axios";
+import { validateTitle, validateDescription } from "../utils/validation";
+import { quillModules, quillFormats, POST_CATEGORIES } from "../utils/reactQuillConfig";
 const EditPost = () => {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Uncategorized");
   const [description, setDescription] = useState("");
   const [thumbnail, setThumbnail] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const modules = {
-    toolbar: [
-      [{ header: [1, 2, 3, 4, 5, false] }],
-      ["bold", "italic", "underline", "strike", "blockquote"],
-      [
-        { list: "ordered" },
-        { list: "bullet" },
-        { indent: "-1" },
-        { indent: "+1" },
-      ],
-      ["link", "image"],
-      ["clean"],
-    ],
-  };
-  const formats = [
-    "header",
-    "bold",
-    "italic",
-    "underline",
-    "strike",
-    "blockquote",
-    "list",
-    "bullet",
-    "indent",
-    "link",
-    "image",
-  ];
-
-  const POST_CATEGORIES = [
-    "AI",
-    "Frontend",
-    "Git",
-    "Practices",
-    "CyberSec",
-    "Uncategorized",
-    "Entertainment",
-  ];
 
   const navigate = useNavigate();
   const {id} = useParams();
@@ -85,12 +52,34 @@ const EditPost = () => {
 
   const editPost = async (e) => {
     e.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+
+    // Validate fields
+    const titleValidation = validateTitle(title);
+    const descriptionValidation = validateDescription(description);
+    const newFieldErrors = {};
+
+    if (!titleValidation.valid) {
+      newFieldErrors.title = titleValidation.message;
+    }
+    if (!descriptionValidation.valid) {
+      newFieldErrors.description = descriptionValidation.message;
+    }
+
+    if (Object.keys(newFieldErrors).length > 0) {
+      setFieldErrors(newFieldErrors);
+      setIsSubmitting(false);
+      return;
+    }
 
     const postData = new FormData();
     postData.set("title", title);
     postData.set("category", category);
     postData.set("description", description);
-    postData.set("thumbnail", thumbnail);
+    if (thumbnail) {
+      postData.set("thumbnail", thumbnail);
+    }
 
     try {
       const response = await axios.patch(
@@ -102,7 +91,8 @@ const EditPost = () => {
         return navigate('/')
       }
     } catch (err) {
-      setError(err.response.data?.message);
+      setError(err.response?.data?.message || 'Failed to update post. Please try again.');
+      setIsSubmitting(false);
     }
   }
 
@@ -112,13 +102,26 @@ const EditPost = () => {
         <h2>Edit Post </h2>
         {error && <p className="form__error-message">{error}</p>}
         <form className="form create-post__form" onSubmit={editPost}>
-          <input
-            type="text"
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-          />
+          <div>
+            <input
+              type="text"
+              placeholder="Title"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (fieldErrors.title) {
+                  const validation = validateTitle(e.target.value);
+                  setFieldErrors(prev => ({
+                    ...prev,
+                    title: validation.valid ? undefined : validation.message
+                  }));
+                }
+              }}
+              className={fieldErrors.title ? 'error' : ''}
+              autoFocus
+            />
+            {fieldErrors.title && <span className="field-error">{fieldErrors.title}</span>}
+          </div>
           <select
             name="category"
             value={category}
@@ -128,19 +131,36 @@ const EditPost = () => {
               <option key={cat}>{cat}</option>
             ))}
           </select>
+          <div>
           <ReactQuill
-            modules={modules}
-            formats={formats}
+            modules={quillModules}
+            formats={quillFormats}
             value={description}
-            onChange={setDescription}
-          />
-          <input
-            type="file"
-            onChange={(e) => setThumbnail(e.target.files[0])}
-            accept="png, jpg, jpeg"
-          />
-          <button type="submit" className="btn primary">
-            Update
+              onChange={(value) => {
+                setDescription(value);
+                if (fieldErrors.description) {
+                  const validation = validateDescription(value);
+                  setFieldErrors(prev => ({
+                    ...prev,
+                    description: validation.valid ? undefined : validation.message
+                  }));
+                }
+              }}
+            />
+            {fieldErrors.description && <span className="field-error">{fieldErrors.description}</span>}
+          </div>
+          <div>
+            <input
+              type="file"
+              onChange={(e) => setThumbnail(e.target.files[0])}
+              accept="png, jpg, jpeg"
+            />
+            <small style={{ display: 'block', marginTop: '0.5rem', color: 'var(--color-gray-500)' }}>
+              Leave empty to keep current thumbnail
+            </small>
+          </div>
+          <button type="submit" className="btn primary" disabled={isSubmitting}>
+            {isSubmitting ? 'Updating...' : 'Update'}
           </button>
         </form>
       </div>

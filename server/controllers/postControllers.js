@@ -6,6 +6,7 @@ const path = require('path')
 const fs = require('fs')
 const { v4: uuid } = require('uuid')
 const HttpError = require('../models/errorModel')
+const { validateThumbnail } = require('../utils/fileValidation')
 
 //============== Create Post =============//
 // POST: api/posts
@@ -17,8 +18,11 @@ const createPost = async (req, res, next) => {
             return next(new HttpError("Fill in all fields and choose thumbnail", 422))
         }
         const { thumbnail } = req.files;
-        if (thumbnail.size > 2000000) {
-            return next(new HttpError("Thumbnail too big. Must be less than 2MB"), 422)
+        
+        // Validate thumbnail file
+        const thumbnailValidation = validateThumbnail(thumbnail);
+        if (!thumbnailValidation.valid) {
+            return next(new HttpError(thumbnailValidation.error, 422))
         }
 
         let fileName = thumbnail.name;
@@ -132,9 +136,10 @@ const editPost = async (req, res, next) => {
                 })
                 // upload new thumbnail
                 const { thumbnail } = req.files;
-                // file size check
-                if (thumbnail.size > 2000000) {
-                    return next(new HttpError("Thumbnail size too big. Must be less than 2MB", 422))
+                // Validate thumbnail file
+                const thumbnailValidation = validateThumbnail(thumbnail);
+                if (!thumbnailValidation.valid) {
+                    return next(new HttpError(thumbnailValidation.error, 422))
                 }
                 fileName = thumbnail.name;
                 let splittedFilename = fileName.split('.');

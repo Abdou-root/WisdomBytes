@@ -22,6 +22,10 @@ const DeletePost = ({ postId: id }) => {
   }, [currentUser, navigate]);
 
   const removePost = async () => {
+    // Confirmation dialog
+    const confirmed = window.confirm('Are you sure you want to delete this post? This action cannot be undone.');
+    if (!confirmed) return;
+
     setIsLoading(true);
     try {
       const response = await axios.delete(
@@ -37,7 +41,9 @@ const DeletePost = ({ postId: id }) => {
       }
       setIsLoading(false);
     } catch (error) {
-      console.log(error);
+      console.error('Error deleting post:', error);
+      alert(error.response?.data?.message || 'Failed to delete post. Please try again.');
+      setIsLoading(false);
     }
   };
 

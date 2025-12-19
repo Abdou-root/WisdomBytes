@@ -7,6 +7,7 @@ import Loader from "../components/Loader";
 import DeletePost from "./DeletePost";
 import { UserContext } from "../context/userContext";
 import axios from "axios";
+import { sanitizeHTML } from "../utils/sanitize";
 
 const PostDetail = () => {
   const { id } = useParams();
@@ -28,11 +29,27 @@ const PostDetail = () => {
       setIsLoading(false)
     }
     getPost();
-  }, [])
+  }, [id])
+
+  if (isLoading) {
+    return <Loader />;
+  }
+
+  if (error) {
+    return (
+      <section className="post-detail">
+        <div className="container center">
+          <p className="form__error-message">
+            {error.response?.data?.message || 'Failed to load post. Please try again.'}
+          </p>
+          <Link to="/" className="btn primary" style={{ marginTop: '1rem' }}>Go Back Home</Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="post-detail">
-      {error && <p className="error">{error}</p>}
       {post && (
         <div className="container post-detail__container">
           <div className="post-detail__header">
@@ -50,7 +67,7 @@ const PostDetail = () => {
           <div className="post-detail__thumbnail">
             <img src={`${process.env.REACT_APP_ASSETS_URL}/uploads/${post.thumbnail}`} alt="" />
           </div>
-          <p dangerouslySetInnerHTML={{__html: post.description}}></p>
+          <div dangerouslySetInnerHTML={{__html: sanitizeHTML(post.description)}}></div>
         </div> 
       )}
     </section>

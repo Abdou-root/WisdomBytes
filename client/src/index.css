@@ -363,6 +363,51 @@ textarea {
   margin-bottom: 1rem;
 }
 
+.form__success-message {
+  background: #4caf50;
+  color: var(--color-white);
+  font-size: 0.8rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-1);
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.field-error {
+  color: var(--color-red);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+input.error,
+select.error,
+textarea.error {
+  border: 2px solid var(--color-red);
+}
+
+.password-strength {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-1);
+}
+
+.password-strength.weak {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.password-strength.medium {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.password-strength.strong {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
 .register,
 .login,
 .create-post {

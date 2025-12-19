@@ -3,11 +3,13 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { Link } from "react-router-dom";
 
 const VerifyOTP = () => {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const changeInputHandler = (e) => {
@@ -19,9 +21,17 @@ const VerifyOTP = () => {
     e.preventDefault();
     setError("");
     setMessage("");
-    // retrieve 
+    setIsSubmitting(true);
+
+    if (!otp) {
+      setError("Please enter the OTP code");
+      setIsSubmitting(false);
+      return;
+    }
+
     if (!userId) {
       setError("User ID not found. Please register again.");
+      setIsSubmitting(false);
       return;
     }
     try {
@@ -36,9 +46,11 @@ const VerifyOTP = () => {
         setTimeout(() => navigate("/login"), 2000); // Redirect to login after 2 seconds
       } else {
         setError(result.message);
+        setIsSubmitting(false);
       }
     } catch (err) {
-      setError(err.response.data.message);
+      setError(err.response?.data?.message || "Verification failed. Please try again.");
+      setIsSubmitting(false);
     }
   };
 
@@ -56,10 +68,13 @@ const VerifyOTP = () => {
             value={otp}
             onChange={changeInputHandler}
           />
-          <button type="submit" className="btn primary">
-            Verify OTP
+          <button type="submit" className="btn primary" disabled={isSubmitting}>
+            {isSubmitting ? 'Verifying...' : 'Verify OTP'}
           </button>
         </form>
+        <small style={{ marginTop: '1rem', display: 'block' }}>
+          Didn't receive the code? <Link to="/register">Register again</Link> or contact support.
+        </small>
       </div>
     </section>
   );

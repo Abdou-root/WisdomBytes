@@ -21,6 +21,7 @@ import EditPost from './pages/EditPost'
 import DeletePost from './pages/DeletePost'
 import Logout from './pages/Logout'
 import UserProvider from './context/userContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import axios from 'axios';
 axios.defaults.withCredentials = true;
 
@@ -56,6 +57,8 @@ const router = createBrowserRouter([
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <ErrorBoundary>
+      <RouterProvider router={router} />
+    </ErrorBoundary>
   </React.StrictMode>
 );

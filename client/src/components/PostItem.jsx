@@ -2,10 +2,13 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 
 import PostAuthor from './PostAuthor'
+import { sanitizeHTML, stripHTML } from '../utils/sanitize'
+
 const PostItem = ({ postID, category, title, description, authorID, thumbnail, createdAt
  }) => {
         const shortDescription = description.length > 145 ? description.substr(0, 145) + '...' : description; 
-        const postTitle = title.length > 30 ? title.substr(0, 30) + '...' : title; 
+        const postTitle = title.length > 30 ? title.substr(0, 30) + '...' : title;
+        const sanitizedDescription = sanitizeHTML(shortDescription); 
 
     return (
         <article className="post">
@@ -16,7 +19,7 @@ const PostItem = ({ postID, category, title, description, authorID, thumbnail, c
                 <Link to={`/posts/${postID}`}>
                     <h3>{postTitle}</h3>
                 </Link>
-                <p dangerouslySetInnerHTML={{__html: shortDescription}}/>
+                <p dangerouslySetInnerHTML={{__html: sanitizedDescription}}/>
                 <div className="post__footer">
                     <PostAuthor authorID={authorID} createdAt = {createdAt}/>
                     <Link to={`/posts/categories/${category}`} className='btn category'>{category}</Link>
