@@ -2,11 +2,10 @@
 
 const Post = require('../models/postModel')
 const User = require('../models/userModel')
-const path = require('path')
-const fs = require('fs')
 const { v4: uuid } = require('uuid')
 const HttpError = require('../models/errorModel')
 const { validateThumbnail } = require('../utils/fileValidation')
+const cloudinary = require('../config/cloudinary')
 
 //============== Create Post =============//
 // POST: api/posts
@@ -25,25 +24,50 @@ const createPost = async (req, res, next) => {
             return next(new HttpError(thumbnailValidation.error, 422))
         }
 
-        let fileName = thumbnail.name;
-        let splittedFilename = fileName.split('.')
-        let newFilename = splittedFilename[0] + uuid() + '.' + splittedFilename[splittedFilename.length - 1]
-        thumbnail.mv(path.join(__dirname, '..', '/uploads', newFilename), async (err) => {
-            if (err) {
-                return next(new HttpError(err))
+        // Upload to Cloudinary
+        try {
+            const uploadOptions = {
+                folder: 'wisdombytes/posts',
+                public_id: `post_${uuid()}`,
+                resource_type: 'auto'
+            };
+            
+            let uploadResult;
+            if (thumbnail.tempFilePath) {
+                // File was saved to temp directory
+                uploadResult = await cloudinary.uploader.upload(thumbnail.tempFilePath, uploadOptions);
             } else {
-                const newPost = await Post.create({ title, category, description, thumbnail: newFilename, creator: req.user.id })
-                if (!newPost) {
-                    return next(new HttpError("Post couldn't be created", 422))
-                }
-                // fetch user and increment post count
-                const currentUser = await User.findById(req.user.id);
-                const userPostCount = currentUser.posts + 1;
-                await User.findByIdAndUpdate(req.user.id, { posts: userPostCount })
-
-                res.status(201).json(newPost)
+                // File is in memory as buffer - use upload_stream
+                uploadResult = await new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    });
+                    uploadStream.end(thumbnail.data);
+                });
             }
-        })
+
+            const newPost = await Post.create({ 
+                title, 
+                category, 
+                description, 
+                thumbnail: uploadResult.secure_url, 
+                creator: req.user.id 
+            });
+            
+            if (!newPost) {
+                return next(new HttpError("Post couldn't be created", 422))
+            }
+            
+            // fetch user and increment post count
+            const currentUser = await User.findById(req.user.id);
+            const userPostCount = currentUser.posts + 1;
+            await User.findByIdAndUpdate(req.user.id, { posts: userPostCount })
+
+            res.status(201).json(newPost)
+        } catch (uploadError) {
+            return next(new HttpError("File upload failed: " + uploadError.message, 422))
+        }
     } catch ({ error }) {
         return next(new HttpError(error))
     }
@@ -125,32 +149,51 @@ const editPost = async (req, res, next) => {
             if (!req.files) {
                 updatedPost = await Post.findByIdAndUpdate(postId, { title, category, description }, { new: true })
             } else {
-                const oldPost = await Post.findById(postId);
-                // rm old thumbnail
-                fs.unlink(path.join(__dirname, '..', '/uploads', oldPost.thumbnail), async (err) => {
-                    if (err) {
-                        return next(new HttpError(err))
-                    }
-
-
-                })
-                // upload new thumbnail
                 const { thumbnail } = req.files;
                 // Validate thumbnail file
                 const thumbnailValidation = validateThumbnail(thumbnail);
                 if (!thumbnailValidation.valid) {
                     return next(new HttpError(thumbnailValidation.error, 422))
                 }
-                fileName = thumbnail.name;
-                let splittedFilename = fileName.split('.');
-                newFilename = splittedFilename[0] + uuid() + ('.') + splittedFilename[splittedFilename.length - 1]
-                thumbnail.mv(path.join(__dirname, '..', '/uploads', newFilename), async (err) => {
-                    if (err) {
-                        return next(new HttpError(err))
+                
+                try {
+                    // Delete old thumbnail from Cloudinary if it exists
+                    if (oldPost.thumbnail && oldPost.thumbnail.includes('cloudinary.com')) {
+                        const publicId = oldPost.thumbnail.split('/').pop().split('.')[0];
+                        await cloudinary.uploader.destroy(`wisdombytes/posts/${publicId}`).catch(err => {
+                            console.log('Error deleting old thumbnail:', err);
+                        });
                     }
-                })
-                updatedPost = await Post.findByIdAndUpdate(postId, { title, category, description, thumbnail: newFilename }, { new: true })
-
+                    
+                    // Upload new thumbnail to Cloudinary
+                    const uploadOptions = {
+                        folder: 'wisdombytes/posts',
+                        public_id: `post_${uuid()}`,
+                        resource_type: 'auto'
+                    };
+                    
+                    let uploadResult;
+                    if (thumbnail.tempFilePath) {
+                        uploadResult = await cloudinary.uploader.upload(thumbnail.tempFilePath, uploadOptions);
+                    } else {
+                        uploadResult = await new Promise((resolve, reject) => {
+                            const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+                                if (error) reject(error);
+                                else resolve(result);
+                            });
+                            uploadStream.end(thumbnail.data);
+                        });
+                    }
+                    
+                    updatedPost = await Post.findByIdAndUpdate(postId, { 
+                        title, 
+                        category, 
+                        description, 
+                        thumbnail: uploadResult.secure_url 
+                    }, { new: true });
+                } catch (uploadError) {
+                    return next(new HttpError("File upload failed: " + uploadError.message, 422))
+                }
             }
         }
         if (!updatedPost) {
@@ -173,22 +216,26 @@ const deletePost = async (req, res, next) => {
             return next(new HttpError("Post Unavailable", 400))
         }
         const post = await Post.findById(postId);
-        const fileName = post.thumbnail;
 
         if (req.user.id == post.creator) {
-            // rm thumbnail
-            fs.unlink(path.join(__dirname, '..', '/uploads', fileName), async (err) => {
-                if (err) {
-                    return next(new HttpError(err))
-                } else {
-                    await Post.findByIdAndDelete(postId);
-                    // reduce user posts count
-                    const currentUser = await User.findById(req.user.id);
-                    const userPostCount = currentUser?.posts - 1;
-                    await User.findByIdAndUpdate(req.user.id, { posts: userPostCount })
-                    res.status(200).json(`Post ${postId} deleted successfully`);
+            try {
+                // Delete thumbnail from Cloudinary if it exists
+                if (post.thumbnail && post.thumbnail.includes('cloudinary.com')) {
+                    const publicId = post.thumbnail.split('/').pop().split('.')[0];
+                    await cloudinary.uploader.destroy(`wisdombytes/posts/${publicId}`).catch(err => {
+                        console.log('Error deleting thumbnail:', err);
+                    });
                 }
-            })
+                
+                await Post.findByIdAndDelete(postId);
+                // reduce user posts count
+                const currentUser = await User.findById(req.user.id);
+                const userPostCount = currentUser?.posts - 1;
+                await User.findByIdAndUpdate(req.user.id, { posts: userPostCount })
+                res.status(200).json(`Post ${postId} deleted successfully`);
+            } catch (error) {
+                return next(new HttpError("Error deleting post: " + error.message, 500))
+            }
         } else {
             return next(new HttpError("Post couldn't be deleted", 403))
         }

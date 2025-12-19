@@ -36,7 +36,8 @@ app.use(cors({
 }));
 
 app.use(upload());
-app.use('/uploads', express.static(__dirname + '/uploads'))
+// Static uploads removed - using Cloudinary for file storage
+// app.use('/uploads', express.static(__dirname + '/uploads'))
 
 app.use('/api/users', userRoutes)
 app.use('/api/posts', postRoutes)

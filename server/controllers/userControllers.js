@@ -4,8 +4,6 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 require('dotenv').config();
-const fs = require('fs')
-const path = require('path')
 const { v4: uuid } = require('uuid')
 const User = require('../models/userModel')
 const HttpError = require("../models/errorModel")
@@ -13,6 +11,7 @@ const userOtpVerification = require("../models/otpVerificationModel")
 const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
 const { validateAvatar } = require('../utils/fileValidation');
+const cloudinary = require('../config/cloudinary');
 
 
 // Nodemailer to send email verification 
@@ -21,7 +20,13 @@ let transporter = nodemailer.createTransport({
     auth: {
         user: process.env.AUTH_EMAIL,
         pass: process.env.AUTH_PASS,
-    }
+    },
+    // Add connection pooling and rate limiting
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 5, // Max messages per connection
+    rateDelta: 1000, // Time window for rate limiting (1 second)
+    rateLimit: 5, // Max 5 emails per rateDelta
 })
 
 
@@ -166,6 +171,13 @@ const resendOTP = async (req, res, next) => {
         if (!userId || !email) {
             return next(new HttpError("Empty user details not allowed", 422))
         }
+        
+        // Check if OTP was sent recently (prevent spam)
+        const recentOTP = await userOtpVerification.findOne({ userId }).sort({ createdAt: -1 });
+        if (recentOTP && (Date.now() - recentOTP.createdAt) < 60000) { // 1 minute cooldown
+            return next(new HttpError("Please wait before requesting another OTP", 429))
+        }
+        
         await userOtpVerification.deleteMany({ userId });
         sendOtpVerificationEmail({ _id: userId, email }, res);
     } catch (error) {
@@ -289,36 +301,51 @@ const changeAvatar = async (req, res, next) => {
 
         // fetch user from db
         const user = await User.findById(req.user.id)
-        // delete old avatar if exists
-        if (user.avatar) {
-            fs.unlink(path.join(__dirname, '..', 'uploads', user.avatar), (err) => {
-                if (err) {
-                    return next(new HttpError(err))
-                }
-            })
-        }
         const { avatar } = req.files;
+        
         // Validate avatar file
         const avatarValidation = validateAvatar(avatar);
         if (!avatarValidation.valid) {
             return next(new HttpError(avatarValidation.error, 422))
         }
 
-        let fileName;
-        fileName = avatar.name;
-        let splittedFilename = fileName.split('.')
-        let newFilename = splittedFilename[0] + uuid() + '.' + splittedFilename[splittedFilename.length - 1]
-        avatar.mv(path.join(__dirname, '..', 'uploads', newFilename), async (err) => {
-            if (err) {
-                return next(new HttpError(err))
+        try {
+            // Delete old avatar from Cloudinary if it exists
+            if (user.avatar && user.avatar.includes('cloudinary.com')) {
+                const publicId = user.avatar.split('/').pop().split('.')[0];
+                await cloudinary.uploader.destroy(`wisdombytes/avatars/${publicId}`).catch(err => {
+                    console.log('Error deleting old avatar:', err);
+                });
+            }
+            
+            // Upload new avatar to Cloudinary
+            const uploadOptions = {
+                folder: 'wisdombytes/avatars',
+                public_id: `avatar_${uuid()}`,
+                resource_type: 'auto'
+            };
+            
+            let uploadResult;
+            if (avatar.tempFilePath) {
+                uploadResult = await cloudinary.uploader.upload(avatar.tempFilePath, uploadOptions);
+            } else {
+                uploadResult = await new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    });
+                    uploadStream.end(avatar.data);
+                });
             }
 
-            const updatedAvatar = await User.findByIdAndUpdate(req.user.id, { avatar: newFilename }, { new: true })
+            const updatedAvatar = await User.findByIdAndUpdate(req.user.id, { avatar: uploadResult.secure_url }, { new: true })
             if (!updatedAvatar) {
                 return next(new HttpError("Avatar couldn't be changed", 422))
             }
             res.status(200).json(updatedAvatar)
-        })
+        } catch (uploadError) {
+            return next(new HttpError("File upload failed: " + uploadError.message, 422))
+        }
 
     } catch (error) {
         return next(new HttpError(error))
